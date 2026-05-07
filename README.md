@@ -46,8 +46,8 @@ Linux, macOS, WSL all supported. No daemon — runs only when Claude Code calls 
 ## Install
 
 ```bash
-git clone <repo> ~/claude-since
-~/claude-since/install.sh
+git clone https://github.com/Nfnat0/claude-code-since.git ~/claude-code-since
+~/claude-code-since/install.sh
 ```
 
 What `install.sh` does:
@@ -112,8 +112,8 @@ Output: `MODEL <name> | since <elapsed>`.
 ## Uninstall
 
 ```bash
-~/claude-since/uninstall.sh              # remove hook entries only
-~/claude-since/uninstall.sh --purge-state  # also delete state files
+~/claude-code-since/uninstall.sh              # remove hook entries only
+~/claude-code-since/uninstall.sh --purge-state  # also delete state files
 ```
 
 The package is self-contained — once uninstalled you can delete the directory.
