@@ -6,6 +6,7 @@ set -euo pipefail
 
 PKG_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HOOK_PATH="$PKG_DIR/hooks/stop-timestamp.sh"
+THINK_HOOK_PATH="$PKG_DIR/hooks/thinking-start.sh"
 SETTINGS="${CLAUDE_SETTINGS:-$HOME/.claude/settings.json}"
 PURGE=0
 
@@ -29,17 +30,19 @@ if [ -f "$SETTINGS" ]; then
   cp "$SETTINGS" "${SETTINGS}.bak.${ts}"
   echo "backup: ${SETTINGS}.bak.${ts}"
 
-  jq --arg cmd "$HOOK_PATH" '
-    def strip($event):
+  jq --arg cmd "$HOOK_PATH" --arg think_cmd "$THINK_HOOK_PATH" '
+    def strip($event; $c):
       if .hooks[$event]? then
         .hooks[$event] |= map(
-          .hooks |= map(select(.command != $cmd))
+          .hooks |= map(select(.command != $c))
         )
         | .hooks[$event] |= map(select((.hooks // []) | length > 0))
         | (if (.hooks[$event] | length) == 0 then del(.hooks[$event]) else . end)
       else . end;
 
-    strip("Stop") | strip("SessionStart")
+    strip("Stop"; $cmd)
+    | strip("SessionStart"; $cmd)
+    | strip("UserPromptSubmit"; $think_cmd)
   ' "$SETTINGS" > "${SETTINGS}.tmp"
   mv "${SETTINGS}.tmp" "$SETTINGS"
   echo "updated: $SETTINGS"
@@ -47,8 +50,8 @@ fi
 
 if [ "$PURGE" = 1 ]; then
   state_dir="${CLAUDE_SINCE_STATE_DIR:-$HOME/.claude/state}"
-  rm -f "$state_dir"/last_stop_*
-  echo "purged: $state_dir/last_stop_*"
+  rm -f "$state_dir"/last_stop_* "$state_dir"/thinking_*
+  echo "purged: $state_dir/{last_stop_*,thinking_*}"
 fi
 
 echo "claude-since uninstalled."

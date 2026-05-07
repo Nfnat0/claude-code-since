@@ -1,39 +1,47 @@
 # claude-since
 
-Show "elapsed time since the assistant's last response" in the Claude Code statusLine.
+Show "idle time since the assistant finished its last response" in the Claude Code statusLine.
 
 ```
+# while you type / read                  -> counts up
 MODEL Opus 4.7 | since 0s
 MODEL Opus 4.7 | since 47s
 MODEL Opus 4.7 | since 3m12s
+
+# while Claude is generating a response  -> frozen at 0s
+MODEL Opus 4.7 | since 0s
 ```
 
-Resets to `0s` automatically when the session is started, resumed, cleared, or compacted.
+The counter freezes at `0s` while the assistant is working, then starts counting from `0s` again the moment the response ends. Also resets on session start, resume, `/clear`, and auto-compaction.
 
 ## How it works
 
 ```
-[Stop event]            [SessionStart event]
- (response end)          (new / resume / clear / compact)
-       \                 /
-        \               /
-         v             v
-     hooks/stop-timestamp.sh
-     -> writes epoch to state file
-                |
-                v
-   ~/.claude/state/last_stop_global
-   ~/.claude/state/last_stop_<session_id>
-                |
-                v   (statusLine refreshInterval)
-        lib/since.sh (sourced)
-        -> $SINCE         "0s" / "1m05s" / "n/a"
-        -> $SINCE_SECONDS  raw seconds
+[UserPromptSubmit]                        [Stop / SessionStart]
+ (you sent a prompt)                       (response end / new / resume / clear / compact)
+        |                                          |
+        v                                          v
+ hooks/thinking-start.sh             hooks/stop-timestamp.sh
+ -> writes "thinking" flag           -> writes epoch to last_stop_*
+                                     -> deletes "thinking" flag
+        |                                          |
+        +---------------+--------------------------+
+                        v
+        ~/.claude/state/thinking_*       <-- presence = "frozen at 0s"
+        ~/.claude/state/last_stop_*      <-- baseline for counter
+                        |
+                        v   (statusLine refreshInterval)
+                lib/since.sh (sourced)
+                -> $SINCE         "0s" / "1m05s" / "n/a"
+                -> $SINCE_SECONDS  raw seconds
+                -> $SINCE_THINKING 1 while frozen, 0 otherwise
 ```
 
-- Stop hook fires at the end of every assistant response and overwrites the timestamp.
-- SessionStart hook fires on new sessions, `--resume`, `/clear`, and auto-compaction. It writes "now", so `$SINCE` starts from `0s`.
-- Statusline reads the file each refresh and computes `now - last_stop`. No daemon, no IPC.
+- **UserPromptSubmit** writes a `thinking_*` flag; statusline shows `0s` while present.
+- **Stop** removes the flag and writes a fresh `last_stop_*`; counter starts incrementing from there.
+- **SessionStart** does the same as Stop on new / `--resume` / `/clear` / compact.
+- A stale `thinking_*` flag is auto-ignored after `CLAUDE_SINCE_THINKING_TTL` seconds (default 1800) so a crashed session does not leave the counter pinned at 0.
+- No daemon, no IPC. Hooks fire only on events; statusline reads files only on refresh.
 
 ## Requirements
 
@@ -53,7 +61,9 @@ git clone https://github.com/Nfnat0/claude-code-since.git ~/claude-code-since
 What `install.sh` does:
 
 1. Backs up `~/.claude/settings.json` to `settings.json.bak.<timestamp>`.
-2. Adds `Stop` and `SessionStart` hook entries pointing at `hooks/stop-timestamp.sh` (idempotent).
+2. Adds hook entries (idempotent):
+   - `Stop`, `SessionStart` -> `hooks/stop-timestamp.sh`
+   - `UserPromptSubmit` -> `hooks/thinking-start.sh`
 3. Sets `statusLine.refreshInterval = 5` (skip with `--keep-interval`).
 
 Options:
@@ -104,10 +114,11 @@ Output: `MODEL <name> | since <elapsed>`.
 
 ## Configuration
 
-| Env var                   | Default              | Description                    |
-|---------------------------|----------------------|--------------------------------|
-| `CLAUDE_SINCE_STATE_DIR`  | `~/.claude/state`    | Where timestamp files are kept |
-| `CLAUDE_SETTINGS`         | `~/.claude/settings.json` | Used by install/uninstall |
+| Env var                       | Default                    | Description                                              |
+|-------------------------------|----------------------------|----------------------------------------------------------|
+| `CLAUDE_SINCE_STATE_DIR`      | `~/.claude/state`          | Where timestamp / thinking files are kept                |
+| `CLAUDE_SINCE_THINKING_TTL`   | `1800`                     | Seconds; ignore stale "thinking" flag older than this    |
+| `CLAUDE_SETTINGS`             | `~/.claude/settings.json`  | Used by install/uninstall                                |
 
 ## Uninstall
 
@@ -128,9 +139,10 @@ claude-since/
 ├── install.sh                    register hooks + tune statusLine
 ├── uninstall.sh                  reverse install
 ├── hooks/
-│   └── stop-timestamp.sh         Stop + SessionStart hook
+│   ├── stop-timestamp.sh         Stop + SessionStart writer (clears flag)
+│   └── thinking-start.sh         UserPromptSubmit writer (sets flag)
 ├── lib/
-│   └── since.sh                  source-able snippet ($SINCE / $SINCE_SECONDS)
+│   └── since.sh                  source-able snippet ($SINCE / $SINCE_SECONDS / $SINCE_THINKING)
 └── examples/
     └── statusline-minimal.sh     drop-in standalone statusLine
 ```

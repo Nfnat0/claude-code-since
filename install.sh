@@ -14,6 +14,7 @@ set -euo pipefail
 
 PKG_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HOOK_PATH="$PKG_DIR/hooks/stop-timestamp.sh"
+THINK_HOOK_PATH="$PKG_DIR/hooks/thinking-start.sh"
 
 SETTINGS="${CLAUDE_SETTINGS:-$HOME/.claude/settings.json}"
 SET_INTERVAL=1
@@ -41,9 +42,7 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 1
 fi
 
-if [ ! -x "$HOOK_PATH" ]; then
-  chmod +x "$HOOK_PATH" 2>/dev/null || true
-fi
+chmod +x "$HOOK_PATH" "$THINK_HOOK_PATH" 2>/dev/null || true
 chmod +x "$PKG_DIR/lib/since.sh" 2>/dev/null || true
 chmod +x "$PKG_DIR/examples/statusline-minimal.sh" 2>/dev/null || true
 
@@ -69,8 +68,9 @@ JQ_FILTER='
         }]
       end;
 
-  ensure_hook("Stop";         $cmd)
-  | ensure_hook("SessionStart"; $cmd)
+  ensure_hook("Stop";              $cmd)
+  | ensure_hook("SessionStart";      $cmd)
+  | ensure_hook("UserPromptSubmit";  $think_cmd)
   | if $set_interval == "1" then
       .statusLine //= {}
       | (.statusLine.refreshInterval //= 5)
@@ -79,7 +79,7 @@ JQ_FILTER='
     else . end
 '
 
-NEW_JSON="$(jq --arg cmd "$HOOK_PATH" --arg set_interval "$SET_INTERVAL" "$JQ_FILTER" "$SETTINGS")"
+NEW_JSON="$(jq --arg cmd "$HOOK_PATH" --arg think_cmd "$THINK_HOOK_PATH" --arg set_interval "$SET_INTERVAL" "$JQ_FILTER" "$SETTINGS")"
 
 if [ "$DRY_RUN" = 1 ]; then
   echo "--- would write ($SETTINGS) ---"
@@ -94,8 +94,9 @@ cat <<EOF
 
 claude-since installed.
 
-Hook registered for events: Stop, SessionStart
-  -> $HOOK_PATH
+Hooks registered:
+  Stop, SessionStart    -> $HOOK_PATH
+  UserPromptSubmit      -> $THINK_HOOK_PATH
 
 To use \$SINCE in your own statusline script, source the snippet:
 

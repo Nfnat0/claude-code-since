@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
-# claude-since: timestamp writer hook.
-# Triggered by both Stop (response end) and SessionStart (new/resume/clear/compact).
+# claude-since: Stop / SessionStart hook.
+# - Stop fires after assistant finishes a response.
+# - SessionStart fires on new / --resume / /clear / compact.
+# Both write current epoch and clear the "thinking" flag so the
+# statusline starts counting from 0s.
 #
-# Writes epoch seconds to:
+# Writes:
 #   $CLAUDE_SINCE_STATE_DIR/last_stop_global         (always)
 #   $CLAUDE_SINCE_STATE_DIR/last_stop_<session_id>   (when session_id present)
-#
-# State dir defaults to ~/.claude/state. Override with CLAUDE_SINCE_STATE_DIR.
+# Removes:
+#   $CLAUDE_SINCE_STATE_DIR/thinking_global
+#   $CLAUDE_SINCE_STATE_DIR/thinking_<session_id>
 
 set -u
 
@@ -21,8 +25,10 @@ mkdir -p "$state_dir" 2>/dev/null || true
 
 now="${EPOCHSECONDS:-$(date +%s)}"
 printf '%s' "$now" > "$state_dir/last_stop_global"
+rm -f "$state_dir/thinking_global"
 if [ -n "$session_id" ]; then
   printf '%s' "$now" > "$state_dir/last_stop_${session_id}"
+  rm -f "$state_dir/thinking_${session_id}"
 fi
 
 exit 0
