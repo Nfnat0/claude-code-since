@@ -54,8 +54,8 @@ fi
 
 SINCE_THINKING=0
 if [ -n "$__cs_think_file" ]; then
-  __cs_think_ts="$(cat "$__cs_think_file" 2>/dev/null || echo 0)"
-  if [ "$__cs_think_ts" -gt 0 ] 2>/dev/null; then
+  __cs_think_ts="$(cat "$__cs_think_file" 2>/dev/null || true)"
+  if [[ "$__cs_think_ts" =~ ^[0-9]+$ ]] && [ "$__cs_think_ts" -gt 0 ]; then
     if [ "$((__cs_now - __cs_think_ts))" -lt "$__cs_thinking_ttl" ]; then
       SINCE_THINKING=1
     fi
@@ -76,8 +76,8 @@ if [ "$SINCE_THINKING" = 1 ]; then
   SINCE="0s"
   SINCE_SECONDS=0
 elif [ -n "$__cs_stop_file" ]; then
-  __cs_last="$(cat "$__cs_stop_file" 2>/dev/null || echo "")"
-  if [ -n "$__cs_last" ] && [ "$__cs_last" -gt 0 ] 2>/dev/null; then
+  __cs_last="$(cat "$__cs_stop_file" 2>/dev/null || true)"
+  if [[ "$__cs_last" =~ ^[0-9]+$ ]] && [ "$__cs_last" -gt 0 ]; then
     SINCE_SECONDS=$((__cs_now - __cs_last))
     [ "$SINCE_SECONDS" -lt 0 ] && SINCE_SECONDS=0
     SINCE="$(claude_since__format "$SINCE_SECONDS")"

@@ -72,10 +72,9 @@ JQ_FILTER='
   | ensure_hook("SessionStart";      $cmd)
   | ensure_hook("UserPromptSubmit";  $think_cmd)
   | if $set_interval == "1" then
-      .statusLine //= {}
-      | (.statusLine.refreshInterval //= 5)
-      | (if (.statusLine.refreshInterval | type) == "number" and (.statusLine.refreshInterval > 5)
-         then .statusLine.refreshInterval = 5 else . end)
+      (if (.statusLine | type) != "object" then .statusLine = {} else . end)
+      | (if (.statusLine.refreshInterval | type) != "number" then .statusLine.refreshInterval = 5 else . end)
+      | (if .statusLine.refreshInterval > 5 then .statusLine.refreshInterval = 5 else . end)
     else . end
 '
 
